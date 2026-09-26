@@ -1,0 +1,17 @@
+{
+  "targets": ["example.com"],
+  "sources": {
+    "crtsh": true,
+    "wayback": true,
+    "hackertarget": true
+  },
+  "certs": {
+    "enabled": false,
+    "warnDays": 30,
+    "criticalDays": 7
+  },
+  "watch": {
+    "ledgerDir": "recon-output",
+    "retention": 30
+  }
+}

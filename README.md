@@ -26,8 +26,19 @@ npm run build
 
 ## Usage
 
+Configuration is allowlist-based: create a `shadowstack.json` (see `shadowstack.example.json`) listing the targets you are authorized to assess. The `recon` and `watch` commands refuse any domain not in `config.targets` (subdomains of listed targets are allowed).
+
+```json
+{
+  "targets": ["example.com"],
+  "sources": { "crtsh": true, "wayback": true, "hackertarget": true },
+  "certs": { "enabled": false, "warnDays": 30, "criticalDays": 7 },
+  "watch": { "ledgerDir": "recon-output", "retention": 30 }
+}
+```
+
 ```bash
-# run passive recon against a root domain you are authorized to assess
+# run passive recon against an allowlisted root domain
 npm run recon -- recon example.com
 
 # write a JSON exposure ledger
@@ -38,6 +49,10 @@ npm run recon -- recon example.com --quiet
 
 # also grab TLS certificates from discovered hosts (active handshake)
 npm run recon -- recon example.com --certs --out recon-output/example.json
+
+# monitor all allowlisted targets: run, diff vs previous ledger, report drift
+# exits 2 if drift or source failures detected (CI-friendly)
+npm run recon -- watch --config shadowstack.json
 
 # compare two ledger runs: new/removed assets, cert rotations
 npm run recon -- diff recon-output/old.json recon-output/new.json
@@ -50,20 +65,28 @@ npm run recon -- graph recon-output/example.json --json --out recon-output/examp
 npm run recon -- ingest scan-headers.json --root-domain example.com --out recon-output/headers.json
 ```
 
+## Continuous monitoring
+
+A scheduled GitHub Actions workflow (`.github/workflows/watch.yml`) runs `shadowstack watch` daily, restores the ledger history via cache, and fails the run when drift or source failures are detected. Push a `shadowstack.json` with your targets to enable it. Drift is surfaced as a workflow annotation plus a `watch-report` artifact; ledgers are cached between runs so each diff is against the real previous state.
+
+## Authorization
+
+ShadowStack is a defensive attack-surface management tool. Only run it against assets you own or are explicitly authorized to assess. The allowlist in `shadowstack.json` is the enforcement mechanism: `recon` and `watch` refuse domains outside `config.targets`. The default pipeline is passive (certificate transparency logs, public DNS). The `--certs` stage performs live TLS handshakes with discovered hosts; only enable it against assets you are authorized to assess.
+
 ## Tests
 
 ```bash
 npm test
 ```
 
-The suite is fully offline (mocked TLS sockets, injected clocks) — no network required.
-
-## Authorization
-
-ShadowStack is a defensive attack-surface management tool. Only run it against assets you own or are explicitly authorized to assess. The default pipeline is passive (certificate transparency logs, public DNS). The `--certs` stage performs live TLS handshakes with discovered hosts; only enable it against assets you are authorized to assess.
+The suite is fully offline (mocked TLS sockets, injected fetch, fake clocks) — no network required.
 
 ## Roadmap
 
-- [ ] More passive sources (passive DNS aggregators, code hosting metadata)
-- [ ] Scheduled re-runs with drift alerting (cron-friendly)
+- [ ] `audit` command — severity-scored checks over ledgers (dangling CNAMEs, wildcard sprawl, orphan IPs)
+- [ ] `scan` command — opt-in port scan of authorized assets
+- [ ] Cert PEM export (`--certs-dir`)
+- [ ] Passive endpoint inventory (harvest paths from wayback data) + active probing (opt-in)
+- [ ] Alert integrations (webhook/email) on drift
+- [ ] Telemetry ingestion (own-infra netflow/DNS logs) → communication graph
 - [ ] Interactive dashboard over accumulated ledgers

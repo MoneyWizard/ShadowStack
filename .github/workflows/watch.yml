@@ -1,0 +1,80 @@
+name: shadowstack watch
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build
+        run: |
+          npm install
+          npm run build
+
+      - name: Load config
+        id: config
+        run: |
+          if [ ! -f shadowstack.json ]; then
+            echo "No shadowstack.json found — nothing to watch." 
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Restore ledger history
+        if: steps.config.outputs.skip != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: recon-output
+          key: shadowstack-ledgers-${{ github.run_id }}
+          restore-keys: |
+            shadowstack-ledgers-
+
+      - name: Run watch
+        if: steps.config.outputs.skip != 'true'
+        id: watch
+        run: |
+          set +e
+          npm run recon -- watch --config shadowstack.json --out recon-output/watch-report.json
+          code=$?
+          echo "exit=$code" >> "$GITHUB_OUTPUT"
+          if [ $code -ne 0 ] && [ $code -ne 2 ]; then
+            exit $code
+          fi
+          exit 0
+
+      - name: Save ledger history
+        if: steps.config.outputs.skip != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: recon-output
+          key: shadowstack-ledgers-${{ github.run_id }}
+
+      - name: Fail on drift or source failure
+        if: steps.config.outputs.skip != 'true' && steps.watch.outputs.exit == '2'
+        run: |
+          echo "::warning::ShadowStack detected exposure drift or source failures"
+          echo "Drift means assets changed between runs — review the watch report."
+          cat recon-output/watch-report.json || true
+          exit 1
+
+      - name: Upload watch report
+        if: steps.config.outputs.skip != 'true' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: watch-report
+          path: recon-output/watch-report.json
+          if-no-files-found: ignore

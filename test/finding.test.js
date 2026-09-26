@@ -73,8 +73,10 @@ test("source registry collects from enabled sources only", async () => {
     .register(makeSource("on", true, [{ value: 1 }]))
     .register(makeSource("off", false, [{ value: 2 }]));
   const results = await reg.collectAll("example.com");
-  assert.equal(results.length, 1);
-  assert.equal(results[0].value, 1);
+  assert.equal(results.findings.length, 1);
+  assert.equal(results.findings[0].value, 1);
+  assert.equal(results.health.length, 1);
+  assert.equal(results.health[0].status, "ok");
   assert.equal(reg.list().length, 2);
 });
 
