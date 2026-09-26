@@ -11,7 +11,10 @@ export class AssetCorrelator implements ReconStage {
   readonly name = "correlate";
 
   async run(findings: Finding[]): Promise<Finding[]> {
-    const clusters = this.clusterBySharedIp(findings);
+    const clusters = [
+      ...this.clusterBySharedIp(findings),
+      ...this.clusterBySharedCert(findings),
+    ];
     for (const f of findings) {
       const cluster = clusters.find((c) => c.members.includes(f.value));
       if (cluster) {
@@ -20,6 +23,21 @@ export class AssetCorrelator implements ReconStage {
       }
     }
     return findings;
+  }
+
+  private clusterBySharedCert(findings: Finding[]): Cluster[] {
+    const clusters: Cluster[] = [];
+    for (const f of findings) {
+      if (f.kind !== "cert") continue;
+      const domains = f.metadata.domains as string[] | undefined;
+      if (!domains || domains.length < 2) continue;
+      clusters.push({
+        key: `shared-cert:${f.value}`,
+        members: [...domains, f.value],
+        reason: `domains present the same certificate (${f.value})`,
+      });
+    }
+    return clusters;
   }
 
   private clusterBySharedIp(findings: Finding[]): Cluster[] {

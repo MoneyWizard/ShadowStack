@@ -1,4 +1,4 @@
-export type AssetKind = "domain" | "ip" | "url" | "cert";
+export type AssetKind = "domain" | "ip" | "url" | "cert" | "unknown";
 
 export type Confidence = "low" | "medium" | "high";
 

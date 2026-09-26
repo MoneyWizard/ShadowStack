@@ -4,6 +4,7 @@ import { SeedSource } from "./sources/seed.js";
 import { CrtShSource } from "./sources/crtsh.js";
 import { SourceRegistry } from "./sources/registry.js";
 import { QuietResolver } from "./resolve/resolver.js";
+import { CertGrabber } from "./certs/grabber.js";
 import { AssetCorrelator } from "./correlate/correlator.js";
 import { ExposureLedger } from "./report/ledger.js";
 import type { Finding } from "./core/finding.js";
@@ -16,15 +17,18 @@ Usage:
 Options:
   --out <path>     write findings ledger to a JSON file
   --quiet          only print summary counts
+  --certs          also grab TLS certificates from discovered hosts (active)
   --help           show this help
 
-The engine only uses passive sources (certificate transparency, public
-DNS resolution) and is intended for assets you are authorized to assess.
+By default the engine only uses passive sources (certificate transparency,
+public DNS resolution). --certs performs live TLS handshakes with
+discovered hosts; only use it against assets you are authorized to assess.
 `;
 
 interface CliOptions {
   out?: string;
   quiet: boolean;
+  certs: boolean;
   help: boolean;
 }
 
@@ -34,7 +38,7 @@ function parseCli(argv: string[]): { command: string; domain: string; opts: CliO
   let out: string | undefined;
 
   if (argv.includes("--help")) {
-    return { command: "", domain: "", opts: { quiet: false, help: true } };
+    return { command: "", domain: "", opts: { quiet: false, certs: false, help: true } };
   }
 
   for (let i = 0; i < argv.length; i++) {
@@ -43,7 +47,7 @@ function parseCli(argv: string[]): { command: string; domain: string; opts: CliO
       out = argv[++i];
       continue;
     }
-    if (arg === "--out" || arg === "--quiet" || arg === "--help") {
+    if (arg === "--out" || arg === "--quiet" || arg === "--certs" || arg === "--help") {
       flags.add(arg);
       continue;
     }
@@ -62,6 +66,7 @@ function parseCli(argv: string[]): { command: string; domain: string; opts: CliO
     opts: {
       out,
       quiet: flags.has("--quiet"),
+      certs: flags.has("--certs"),
       help: flags.has("--help"),
     },
   };
@@ -76,11 +81,14 @@ async function runRecon(domain: string, opts: CliOptions): Promise<void> {
   const collected = await registry.collectAll(domain);
   seed.push(...collected);
 
-  const pipeline = new Pipeline()
-    .add(new QuietResolver())
-    .add(new AssetCorrelator());
+  const pipeline = new Pipeline().add(new QuietResolver());
+  if (opts.certs) {
+    pipeline.add(new CertGrabber());
+  }
+  pipeline.add(new AssetCorrelator());
 
-  const findings = await pipeline.run(seed);
+  const findings = await pipeline.run(collected);
+
   const ledger = new ExposureLedger({ outPath: opts.out });
   ledger.write(findings);
 
