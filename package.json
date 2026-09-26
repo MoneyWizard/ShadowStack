@@ -1,0 +1,22 @@
+{
+  "name": "shadowstack",
+  "version": "0.1.0",
+  "description": "Passive-first attack surface recon engine. Discovers what is already exposed about assets you are authorized to assess, without touching the target directly.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "shadowstack": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test test/*.test.js",
+    "recon": "node dist/cli.js"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "typescript": "^5.6.0"
+  }
+}
