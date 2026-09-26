@@ -14,6 +14,7 @@ sources → resolve → correlate → report
 - **resolve** — quiet DNS resolution through public resolvers, with bounded concurrency.
 - **certs** — opt-in certificate grabber: live TLS handshake with discovered hosts to pull subject, issuer, validity window, serial, SHA-256 fingerprint, and SANs. Certificates are deduped by fingerprint — one finding per deployed cert, tagged with every domain that presents it.
 - **correlate** — clusters assets that share infrastructure: domains on the same IP (`shared-ip:`), domains presenting the same certificate (`shared-cert:` — a strong same-deployment signal), and URLs sharing an HTTP header fingerprint (`shared-headers:`), revealing hidden topology.
+- **audit** — severity-scored security checks over any ledger: cert expiry (high/medium), dangling CNAMEs (high — takeover risk), wildcard cert sprawl (medium), missing security headers on ingested artifacts, source health. Exits 2 on high severity so CI can gate on it.
 - **ingest** — HTTP header fingerprint ingestion from existing scan artifacts (JSON or raw response dumps): server, x-powered-by, and CDN detection, no live traffic.
 - **report** — an exposure ledger: every finding carries source provenance, timestamp, and confidence. Auditable, re-runnable, diffable over time. With `--certs`, the ledger also carries expiry alerts (`expired` / `critical` ≤7d / `warning` ≤30d). The `diff` command surfaces drift between runs (added/removed assets, cert rotations); the `graph` command exports the asset relationship graph as Graphviz DOT or node-link JSON.
 
@@ -54,6 +55,9 @@ npm run recon -- recon example.com --certs --out recon-output/example.json
 # exits 2 if drift or source failures detected (CI-friendly)
 npm run recon -- watch --config shadowstack.json
 
+# audit a ledger: severity-scored checks, exits 2 on high-severity issues
+npm run recon -- audit recon-output/example.json --out recon-output/audit.json
+
 # compare two ledger runs: new/removed assets, cert rotations
 npm run recon -- diff recon-output/old.json recon-output/new.json
 
@@ -83,7 +87,6 @@ The suite is fully offline (mocked TLS sockets, injected fetch, fake clocks) —
 
 ## Roadmap
 
-- [ ] `audit` command — severity-scored checks over ledgers (dangling CNAMEs, wildcard sprawl, orphan IPs)
 - [ ] `scan` command — opt-in port scan of authorized assets
 - [ ] Cert PEM export (`--certs-dir`)
 - [ ] Passive endpoint inventory (harvest paths from wayback data) + active probing (opt-in)

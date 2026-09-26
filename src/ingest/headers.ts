@@ -180,6 +180,7 @@ export function headerFindings(
         poweredBy: fp.poweredBy,
         cdn: fp.cdn,
         technologies: fp.technologies,
+        headers: record.headers,
       },
     });
   }

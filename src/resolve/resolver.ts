@@ -19,24 +19,45 @@ export class QuietResolver implements ReconStage {
 
     const queue = [...domains];
     const ips = new Map<string, string[]>();
+    const cnames = new Map<string, string>();
+    const dangling = new Set<string>();
     const workers = Array.from({ length: this.concurrency }, async () => {
       const resolver = new Resolver();
       for (;;) {
         const domain = queue.shift();
         if (domain === undefined) return;
         try {
+          const cnameRecords = await resolver.resolveCname(domain);
+          if (cnameRecords.length > 0) {
+            cnames.set(domain, cnameRecords[0]);
+          }
+        } catch {
+          // no cname or lookup error; not conclusive either way
+        }
+        try {
           const records = await resolver.resolve4(domain);
           if (records.length > 0) {
             ips.set(domain, records);
           }
-        } catch {
-          continue;
+        } catch (err) {
+          if (cnames.has(domain)) {
+            dangling.add(domain);
+          }
+          void err;
         }
       }
     });
     await Promise.all(workers);
 
     const out = [...findings];
+    for (const f of out) {
+      if (f.kind !== "domain") continue;
+      const cname = cnames.get(f.value);
+      if (cname) {
+        f.metadata.cname = cname;
+        f.metadata.cnameDangling = dangling.has(f.value);
+      }
+    }
     for (const [domain, records] of ips) {
       for (const ip of records) {
         out.push({

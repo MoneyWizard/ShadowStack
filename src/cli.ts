@@ -24,6 +24,7 @@ Usage:
   shadowstack graph <ledger.json> [--out graph.dot] [--json]
   shadowstack ingest <headers-artifact> --root-domain <domain> [--out ledger.json]
   shadowstack watch [--config shadowstack.json] [--out report.json]
+  shadowstack audit <ledger.json> [--out report.json] [--quiet]
 
 Options (recon):
   --out <path>     write findings ledger to a JSON file
@@ -49,6 +50,10 @@ Options (all):
 
 watch runs recon for every allowlisted target, diffs against the previous
 ledger, and exits 2 if any drift or source failure was detected.
+
+audit runs severity-scored checks over a ledger (cert expiry, dangling
+CNAMEs, wildcard cert sprawl, missing security headers, source health)
+and exits 2 if any high-severity issue is found.
 
   --help           show this help
 
@@ -113,6 +118,8 @@ function parseCli(argv: string[]): { command: string; positional: string[]; opts
     if (positional.length < 2) return null;
   } else if (command === "watch") {
     if (positional.length !== 1) return null;
+  } else if (command === "audit") {
+    if (positional.length < 2) return null;
   } else if (positional.length < 2) {
     return null;
   }
@@ -329,6 +336,33 @@ async function runWatch(config: ShadowStackConfig, opts: CliOptions): Promise<vo
   }
 }
 
+async function runAuditCmd(path: string, opts: CliOptions): Promise<void> {
+  const { readFileSync, mkdirSync, writeFileSync } = await import("node:fs");
+  const { dirname } = await import("node:path");
+  const { runAudit, auditToConsole } = await import("./audit/audit.js");
+  const parsed = JSON.parse(readFileSync(path, "utf8"));
+  const findings = Array.isArray(parsed?.findings) ? parsed.findings : [];
+  const sources = Array.isArray(parsed?.sources) ? parsed.sources : [];
+
+  const report = runAudit(findings, sources);
+
+  if (opts.out) {
+    mkdirSync(dirname(opts.out), { recursive: true });
+    writeFileSync(
+      opts.out,
+      JSON.stringify({ ...report, ledgerPath: path }, null, 2),
+    );
+  }
+
+  console.log(opts.quiet
+    ? `issues: ${report.issues.length}  high: ${report.counts.high}  medium: ${report.counts.medium}  low: ${report.counts.low}`
+    : auditToConsole(report));
+
+  if (report.counts.high > 0) {
+    process.exitCode = 2;
+  }
+}
+
 async function main(): Promise<void> {
   const parsed = parseCli(process.argv.slice(2));
   if (
@@ -339,7 +373,8 @@ async function main(): Promise<void> {
       parsed.command !== "diff" &&
       parsed.command !== "graph" &&
       parsed.command !== "ingest" &&
-      parsed.command !== "watch"
+      parsed.command !== "watch" &&
+      parsed.command !== "audit"
     )
   ) {
     console.log(USAGE);
@@ -372,6 +407,16 @@ async function main(): Promise<void> {
       await runIngest(parsed.positional[1], parsed.opts);
     } catch (err) {
       console.error(`ingest failed: ${err instanceof Error ? err.message : String(err)}`);
+      process.exitCode = 1;
+    }
+    return;
+  }
+
+  if (parsed.command === "audit") {
+    try {
+      await runAuditCmd(parsed.positional[1], parsed.opts);
+    } catch (err) {
+      console.error(`audit failed: ${err instanceof Error ? err.message : String(err)}`);
       process.exitCode = 1;
     }
     return;
