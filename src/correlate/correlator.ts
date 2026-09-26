@@ -14,6 +14,7 @@ export class AssetCorrelator implements ReconStage {
     const clusters = [
       ...this.clusterBySharedIp(findings),
       ...this.clusterBySharedCert(findings),
+      ...this.clusterBySharedHeaders(findings),
     ];
     for (const f of findings) {
       const cluster = clusters.find((c) => c.members.includes(f.value));
@@ -23,6 +24,29 @@ export class AssetCorrelator implements ReconStage {
       }
     }
     return findings;
+  }
+
+  private clusterBySharedHeaders(findings: Finding[]): Cluster[] {
+    const bySig = new Map<string, Set<string>>();
+    for (const f of findings) {
+      if (f.kind !== "url") continue;
+      const tech = f.metadata.technologies as string[] | undefined;
+      if (!tech || tech.length === 0) continue;
+      const sig = tech.slice().sort().join("|");
+      const set = bySig.get(sig) ?? new Set<string>();
+      set.add(f.value);
+      bySig.set(sig, set);
+    }
+    const clusters: Cluster[] = [];
+    for (const [sig, urls] of bySig) {
+      if (urls.size < 2) continue;
+      clusters.push({
+        key: `shared-headers:${sig}`,
+        members: [...urls],
+        reason: `urls share header fingerprint (${sig})`,
+      });
+    }
+    return clusters;
   }
 
   private clusterBySharedCert(findings: Finding[]): Cluster[] {
