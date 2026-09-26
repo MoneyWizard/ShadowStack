@@ -90,10 +90,10 @@ async function runRecon(domain: string, opts: CliOptions): Promise<void> {
   const findings = await pipeline.run(collected);
 
   const ledger = new ExposureLedger({ outPath: opts.out });
-  ledger.write(findings);
+  const { alerts } = ledger.write(findings);
 
   if (!opts.quiet) {
-    console.log(ledger.toConsole(findings));
+    console.log(ledger.toConsole(findings, alerts));
   } else {
     const domains = findings.filter((f) => f.kind === "domain").length;
     const ips = findings.filter((f) => f.kind === "ip").length;
